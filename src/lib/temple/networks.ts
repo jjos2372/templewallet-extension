@@ -110,6 +110,15 @@ export const NETWORKS: TempleNetwork[] = [
     color: "#e9e1cc",
     disabled: false,
   },
+  {
+    id: "local-mainnet",
+    name: "localhost:8125",
+    description: "Local Node - Mainnet",
+    type: "test",
+    rpcBaseURL: "http://localhost:8125",
+    color: "#e9e1cc",
+    disabled: false,
+  },
   // Hidden
   {
     id: "giganode-testnet",

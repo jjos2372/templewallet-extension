@@ -13,8 +13,8 @@ const HashShortView = memo<HashShortViewProps>(
     hash,
     trim = true,
     trimAfter = 20,
-    firstCharsCount = 7,
-    lastCharsCount = 4,
+    firstCharsCount = 6,
+    lastCharsCount = 5,
   }) => {
     if (!hash) return null;
 

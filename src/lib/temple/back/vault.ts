@@ -1,3 +1,5 @@
+import { Address } from "@signumjs/core";
+import { generateMasterKeys } from "@signumjs/crypto";
 import { HttpResponseError } from "@taquito/http-utils";
 import { DerivationType } from "@taquito/ledger-signer";
 import { localForger } from "@taquito/local-forging";
@@ -79,13 +81,20 @@ export class Vault {
       if (!mnemonic) {
         mnemonic = Bip39.generateMnemonic(128);
       }
-      const seed = Bip39.mnemonicToSeedSync(mnemonic);
+      // const seed = Bip39.mnemonicToSeedSync(mnemonic);
 
       const hdAccIndex = 0;
-      const accPrivateKey = seedToHDPrivateKey(seed, hdAccIndex);
-      const [accPublicKey, accPublicKeyHash] = await getPublicKeyAndHash(
-        accPrivateKey
-      );
+      // const accPrivateKey = seedToHDPrivateKey(seed, hdAccIndex);
+
+      const accKeys = generateMasterKeys(mnemonic);
+      const accPublicKey = accKeys.publicKey;
+      const accPrivateKey = accKeys.signPrivateKey;
+      const accAddress = Address.fromPublicKey(accPublicKey);
+      const accPublicKeyHash = accAddress.getReedSolomonAddress();
+
+      // const [accPublicKey, accPublicKeyHash] = await getPublicKeyAndHash(
+      //   accPrivateKey
+      // );
 
       const initialAccount: TempleAccount = {
         type: TempleAccountType.HD,
@@ -227,7 +236,7 @@ export class Vault {
         this.fetchAccounts(),
       ]);
 
-      const seed = Bip39.mnemonicToSeedSync(mnemonic);
+      // const seed = Bip39.mnemonicToSeedSync(mnemonic);
 
       if (!hdAccIndex) {
         const allHDAccounts = allAccounts.filter(
@@ -236,10 +245,22 @@ export class Vault {
         hdAccIndex = allHDAccounts.length;
       }
 
-      const accPrivateKey = seedToHDPrivateKey(seed, hdAccIndex);
-      const [accPublicKey, accPublicKeyHash] = await getPublicKeyAndHash(
-        accPrivateKey
-      );
+      //const accPrivateKey = seedToHDPrivateKey(seed, hdAccIndex);
+      //const [accPublicKey, accPublicKeyHash] = await getPublicKeyAndHash(
+      //  accPrivateKey
+      //);
+
+      // FIXME: define a standard way to handle the HD-index stuff
+      var mnemonicWithIndex = mnemonic;
+      if(hdAccIndex >= 0){
+        mnemonicWithIndex += String(hdAccIndex);
+      }
+      const accKeys = generateMasterKeys(mnemonicWithIndex);
+      const accPublicKey = accKeys.publicKey;
+      const accPrivateKey = accKeys.signPrivateKey;
+      const accAddress = Address.fromPublicKey(accPublicKey);
+      const accPublicKeyHash = accAddress.getReedSolomonAddress();
+
       const accName = name || getNewAccountName(allAccounts);
 
       if (allAccounts.some((a) => a.publicKeyHash === accPublicKeyHash)) {
@@ -267,13 +288,14 @@ export class Vault {
     });
   }
 
-  async importAccount(accPrivateKey: string, encPassword?: string) {
+  async importAccountOld(accPrivateKey: string, encPassword?: string) {
     const errMessage =
       "Failed to import account" +
       ".\nThis may happen because provided Key is invalid";
 
     return withError(errMessage, async () => {
       const allAccounts = await this.fetchAccounts();
+
       const signer = await createMemorySigner(accPrivateKey, encPassword);
       const [realAccPrivateKey, accPublicKey, accPublicKeyHash] =
         await Promise.all([
@@ -308,19 +330,47 @@ export class Vault {
     derivationPath?: string
   ) {
     return withError("Failed to import account", async () => {
-      let seed;
-      try {
-        seed = Bip39.mnemonicToSeedSync(mnemonic, password);
-      } catch (_err) {
-        throw new PublicError("Invalid Mnemonic or Password");
-      }
+      // try {
+      //   seed = Bip39.mnemonicToSeedSync(mnemonic, password);
+      // } catch (_err) {
+      //   throw new PublicError("Invalid Mnemonic or Password");
+      // }
 
-      if (derivationPath) {
-        seed = deriveSeed(seed, derivationPath);
-      }
+      // if (derivationPath) {
+      //   seed = deriveSeed(seed, derivationPath);
+      // }
 
-      const privateKey = seedToPrivateKey(seed);
-      return this.importAccount(privateKey);
+      // return this.importAccount(privateKey);
+
+      const allAccounts = await this.fetchAccounts();
+      if(password){
+        mnemonic += password;
+      }
+      let seed = generateMasterKeys(mnemonic);
+      const accAddress = Address.fromPublicKey(seed.publicKey);
+
+      const realAccPrivateKey = seed.signPrivateKey;
+      const accPublicKey = seed.publicKey;
+      const accPublicKeyHash = accAddress.getReedSolomonAddress();
+
+      const newAccount: TempleAccount = {
+        type: TempleAccountType.Imported,
+        name: getNewAccountName(allAccounts),
+        publicKeyHash: accPublicKeyHash,
+      };
+      const newAllAcounts = concatAccount(allAccounts, newAccount);
+
+      await encryptAndSaveMany(
+        [
+          [accPrivKeyStrgKey(accPublicKeyHash), realAccPrivateKey],
+          [accPubKeyStrgKey(accPublicKeyHash), accPublicKey],
+          [accountsStrgKey, newAllAcounts],
+        ],
+        this.passKey
+      );
+
+      return newAllAcounts;
+
     });
   }
 
@@ -330,9 +380,10 @@ export class Vault {
     mnemonic: string
   ) {
     return withError("Failed to import fundraiser account", async () => {
-      const seed = Bip39.mnemonicToSeedSync(mnemonic, `${email}${password}`);
-      const privateKey = seedToPrivateKey(seed);
-      return this.importAccount(privateKey);
+      // const seed = Bip39.mnemonicToSeedSync(mnemonic, `${email}${password}`);
+      // const privateKey = seedToPrivateKey(seed);
+//      return this.importAccount(privateKey);
+      return this.importMnemonicAccount(mnemonic, `${email}${password}`);
     });
   }
 
